@@ -1560,7 +1560,7 @@ function drawGreenView(){
   var DRAW_ORDER=['Rough','Fairway','Green','Greenside Bunker'];
   DRAW_ORDER.forEach(function(type){
     hFeatures.filter(function(f){return f.label===type;}).forEach(function(f){
-      var style=FEATURE_STYLES[type]||FEATURE_STYLES['Rough'];
+      var style=STYLE[type]||STYLE['Rough'];
       ctx2.beginPath();
       f.coords.forEach(function(ring){
         ring.forEach(function(pt,i){
