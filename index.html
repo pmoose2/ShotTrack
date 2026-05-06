@@ -1486,7 +1486,12 @@ function drawGreenView(){
   // offsetWidth/Height works even when flex panel just became visible
   var W=wrap.offsetWidth;
   var H=wrap.offsetHeight;
-  // Fallback if still zero (can happen on first paint)
+  // Show debug info on the canvas wrap
+  var dbg=document.getElementById('gv-debug');
+  if(!dbg){dbg=document.createElement('div');dbg.id='gv-debug';
+    dbg.style.cssText='position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.7);color:#0f0;font-size:11px;padding:4px 6px;border-radius:4px;z-index:10;pointer-events:none;';
+    wrap.appendChild(dbg);}
+  dbg.textContent='wrap:'+W+'x'+H+' hole:'+(currentHole+1)+' feats:'+ALL_FEATURES.filter(function(f){return f.hole===currentHole+1;}).length;
   if(!W||!H){
     setTimeout(drawGreenView,100);
     return;
