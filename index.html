@@ -1501,6 +1501,7 @@ function drawGreenView(){
   var ctx2=cv.getContext('2d');
   ctx2.fillStyle='#0d1f10';
   ctx2.fillRect(0,0,W,H);
+  try {
 
   document.getElementById('gv-hole-name').textContent='Hole '+(currentHole+1);
   document.getElementById('gv-par-info').textContent=' · Par '+PARS[currentHole];
@@ -1596,6 +1597,16 @@ function drawGreenView(){
       if(style.stroke){ctx2.strokeStyle=style.stroke;ctx2.lineWidth=1.5;ctx2.stroke();}
     });
   });
+
+  } catch(e) {
+    ctx2.fillStyle='#ff4444';
+    ctx2.font='13px -apple-system,sans-serif';
+    ctx2.textAlign='center'; ctx2.textBaseline='middle';
+    ctx2.fillText('Draw error: '+e.message, W/2, H/2);
+    var dbg2=document.getElementById('gv-debug');
+    if(dbg2) dbg2.textContent+=' ERR:'+e.message;
+    return;
+  }
 
   // Pin
   if(pin){
