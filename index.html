@@ -1540,8 +1540,9 @@ function drawGreenView(){
   var bMaxLat=Math.max.apply(null,lats);
 
   // Expand by fixed ~25 yards in each direction from green edge
+  var midLat=(bMinLat+bMaxLat)/2;
   var yardsBuffer = 28;
-  var latBuffer  = yardsBuffer / 1760 * (1/69.0);   // yards → degrees lat
+  var latBuffer  = yardsBuffer / 1760 * (1/69.0);
   var lngBuffer  = yardsBuffer / 1760 * (1/69.0) / Math.cos(midLat*Math.PI/180);
   bMinLng -= lngBuffer; bMaxLng += lngBuffer;
   bMinLat -= latBuffer; bMaxLat += latBuffer;
@@ -1549,8 +1550,6 @@ function drawGreenView(){
     bMinLng=Math.min(bMinLng,pin.lng-lngBuffer*0.5); bMaxLng=Math.max(bMaxLng,pin.lng+lngBuffer*0.5);
     bMinLat=Math.min(bMinLat,pin.lat-latBuffer*0.5); bMaxLat=Math.max(bMaxLat,pin.lat+latBuffer*0.5);
   }
-
-  var midLat=(bMinLat+bMaxLat)/2;
   var cosLat=Math.cos(midLat*Math.PI/180);
   var geoW=(bMaxLng-bMinLng)*cosLat;
   var geoH=bMaxLat-bMinLat;
