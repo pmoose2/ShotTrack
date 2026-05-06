@@ -8,6 +8,63 @@
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; }
   .dm-serif { font-family: Georgia, 'Times New Roman', serif; }
+
+/* ── GREEN VIEW PANEL ── */
+#green-panel{
+  display:none;flex:1;flex-direction:column;
+  background:var(--green-deep);overflow:hidden;
+}
+#green-panel.active{display:flex;}
+.green-view-wrap{
+  flex:1;display:flex;flex-direction:column;min-height:0;
+}
+#green-canvas-wrap{
+  flex:1;position:relative;min-height:0;
+}
+#green-canvas{
+  width:100%;height:100%;display:block;
+  touch-action:none;
+}
+.green-controls{
+  background:rgba(8,18,10,0.95);
+  border-top:1px solid rgba(255,255,255,0.08);
+  padding:12px 16px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.green-top-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.green-hole-info{
+  font-size:13px;color:var(--text-dim);
+}
+.green-hole-info strong{color:var(--white);font-size:16px;}
+.set-pin-btn{
+  padding:11px 18px;border-radius:10px;border:none;
+  background:rgba(82,184,54,0.15);color:var(--green-bright);
+  border:1px solid rgba(82,184,54,0.35);
+  font-size:13px;font-weight:700;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.set-pin-btn:active{background:rgba(82,184,54,0.25);}
+.set-pin-btn.locating{animation:pulse 1s infinite;opacity:0.7;}
+.green-putt-row{
+  display:flex;align-items:center;gap:8px;
+}
+.green-putt-label{
+  font-size:12px;color:var(--text-dim);flex:1;
+}
+.green-dist{
+  font-size:13px;font-weight:700;color:var(--white);
+  text-align:center;padding:8px 12px;
+  background:rgba(255,255,255,0.06);
+  border-radius:8px;min-width:90px;
+}
+@media(max-width:600px){
+  .green-controls{padding:10px 12px;gap:8px;}
+  .set-pin-btn{padding:10px 14px;font-size:12px;}
+}
 </style>
 <style>
 :root {
@@ -382,8 +439,9 @@ button, .hbtn, .tbtn, .lbtn, .mbtn, .ntab {
 <div id="nav">
   <div class="nav-logo">Shot<span>Track</span></div>
   <div class="nav-tabs">
-    <button class="ntab active" onclick="showTab('track')">Live Tracker</button>
-    <button class="ntab" onclick="showTab('scorecard')">Scorecard &amp; Stats</button>
+    <button class="ntab active" id="ntab-track" onclick="showTab('track')">Track</button>
+    <button class="ntab" id="ntab-green" onclick="showTab('green')">Green</button>
+    <button class="ntab" id="ntab-scorecard" onclick="showTab('scorecard')">Scorecard</button>
   </div>
   <div class="nav-right">
     <button class="nav-player" id="pname-btn" onclick="changeName()">Player: —</button>
@@ -435,9 +493,12 @@ button, .hbtn, .tbtn, .lbtn, .mbtn, .ntab {
     </div>
     <div class="sb-mode">
       <div class="mode-row">
-        <button class="mbtn" id="mbtn-pin" onclick="setMode('pin')">Set Flag ⛳</button>
+        <button class="mbtn" id="mbtn-pin" onclick="setMode('pin')">Tap to Place Flag</button>
         <button class="mbtn" id="mbtn-shot" onclick="setMode('shot')">Tap to Drop</button>
       </div>
+      <button class="gps-btn" id="set-pin-gps-btn" style="background:rgba(255,255,255,0.08);color:var(--white);box-shadow:none;border:1px solid rgba(255,255,255,0.12);margin-top:6px;font-size:12px;padding:9px;">
+        📍 GPS Set Pin Location
+      </button>
     </div>
     <div id="shot-list-wrap">
       <div class="sb-section-label">Shots This Hole</div>
@@ -465,6 +526,35 @@ button, .hbtn, .tbtn, .lbtn, .mbtn, .ntab {
       <div><span class="legend-dot" style="background:#e0d4a8;"></span>Native / Sand</div>
     </div>
     <div class="map-overlay toast" id="toast">Select a hole to begin</div>
+  </div>
+
+  <!-- GREEN VIEW -->
+  <div id="green-panel">
+    <div class="green-view-wrap">
+      <div id="green-canvas-wrap">
+        <canvas id="green-canvas" style="touch-action:none;"></canvas>
+        <div class="map-overlay toast" id="green-toast" style="display:none;"></div>
+      </div>
+      <div class="green-controls">
+        <div class="green-top-row">
+          <div class="green-hole-info">
+            <strong id="gv-hole-name">—</strong>
+            <span id="gv-par-info"></span>
+          </div>
+          <button class="set-pin-btn" id="set-pin-btn">📍 Set Pin Here</button>
+        </div>
+        <div class="green-top-row">
+          <div class="green-dist" id="gv-dist">— to pin</div>
+          <div class="green-putt-row" id="gv-putt-row" style="display:none">
+            <span class="green-putt-label">Putts:</span>
+            <button class="putt-btn" id="gv-putt-minus">−</button>
+            <div class="putt-count" id="gv-putt-count">2</div>
+            <button class="putt-btn" id="gv-putt-plus">+</button>
+            <button class="putt-confirm" id="gv-putt-confirm">Log ✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- SCORECARD -->
@@ -1375,14 +1465,244 @@ function updateSidebar(){
 
 // ── TABS ───────────────────────────────────────────────────
 function showTab(tab){
-  document.querySelectorAll('.ntab').forEach((b,i)=>b.classList.toggle('active',['track','scorecard'][i]===tab));
+  document.getElementById('ntab-track').classList.toggle('active',tab==='track');
+  document.getElementById('ntab-green').classList.toggle('active',tab==='green');
+  document.getElementById('ntab-scorecard').classList.toggle('active',tab==='scorecard');
   document.getElementById('map-panel').style.display=tab==='track'?'flex':'none';
   document.getElementById('sidebar').style.display=tab==='track'?'flex':'none';
+  document.getElementById('green-panel').style.display=tab==='green'?'flex':'none';
   document.getElementById('sc-panel').style.display=tab==='scorecard'?'block':'none';
-  if(tab==='scorecard')buildReport();
+  if(tab==='scorecard') buildReport();
+  else if(tab==='green') setTimeout(drawGreenView,50);
   else setTimeout(drawMap,50);
 }
 function finishRound(){showTab('scorecard');}
+
+// ── GREEN VIEW ──────────────────────────────────────────────
+function drawGreenView(){
+  if(currentHole<0) return;
+  const cv=document.getElementById('green-canvas');
+  const wrap=document.getElementById('green-canvas-wrap');
+  cv.width=wrap.clientWidth||window.innerWidth;
+  cv.height=wrap.clientHeight||(window.innerHeight*0.55);
+  const ctx2=cv.getContext('2d');
+  ctx2.clearRect(0,0,cv.width,cv.height);
+
+  // Update header
+  const par=PARS[currentHole];
+  document.getElementById('gv-hole-name').textContent='Hole '+(currentHole+1);
+  document.getElementById('gv-par-info').textContent=' · Par '+par;
+
+  // Filter to green-complex features only
+  const greenTypes=['Green','Greenside Bunker','Rough','Native Area','Fairway'];
+  const hFeatures=ALL_FEATURES.filter(f=>f.hole===currentHole+1&&
+    (f.label==='Green'||f.label==='Greenside Bunker'||f.label==='Rough'||f.label==='Fairway'));
+  const pin=roundData[currentHole].pin;
+
+  if(!hFeatures.length){
+    ctx2.fillStyle='rgba(255,255,255,0.3)';
+    ctx2.font='16px -apple-system,sans-serif';
+    ctx2.textAlign='center';
+    ctx2.fillText('No green data for hole '+(currentHole+1),cv.width/2,cv.height/2);
+    return;
+  }
+
+  // Tight bounds around the green only (expand 40% for context)
+  const greenFeats=hFeatures.filter(f=>f.label==='Green');
+  const allPts=greenFeats.flatMap(f=>f.coords.flatMap(r=>r));
+  if(!allPts.length) return;
+  let gMinLng=Math.min(...allPts.map(p=>p[0]));
+  let gMaxLng=Math.max(...allPts.map(p=>p[0]));
+  let gMinLat=Math.min(...allPts.map(p=>p[1]));
+  let gMaxLat=Math.max(...allPts.map(p=>p[1]));
+
+  // Expand bounds by 3x to show surroundings
+  const lngPad=(gMaxLng-gMinLng)*2.5;
+  const latPad=(gMaxLat-gMinLat)*2.5;
+  gMinLng-=lngPad; gMaxLng+=lngPad;
+  gMinLat-=latPad; gMaxLat+=latPad;
+
+  if(pin){
+    gMinLng=Math.min(gMinLng,pin.lng-lngPad*0.3);
+    gMaxLng=Math.max(gMaxLng,pin.lng+lngPad*0.3);
+    gMinLat=Math.min(gMinLat,pin.lat-latPad*0.3);
+    gMaxLat=Math.max(gMaxLat,pin.lat+latPad*0.3);
+  }
+
+  // Use same tee-to-green rotation as main view
+  const midLat=(gMinLat+gMaxLat)/2;
+  const cosLat=Math.cos(midLat*Math.PI/180);
+  const PAD2=28;
+  const W=cv.width, H=cv.height;
+  const geoW=(gMaxLng-gMinLng)*cosLat;
+  const geoH=(gMaxLat-gMinLat);
+  const scaleX=(W-PAD2*2)/geoW;
+  const scaleY=(H-PAD2*2)/geoH;
+  const scale=Math.min(scaleX,scaleY);
+  const cW2=geoW*scale, cH2=geoH*scale;
+  const offX=(W-cW2)/2, offY=(H-cH2)/2;
+
+  function gProj(lng,lat){
+    // Apply hole rotation
+    const rp=holeRotation!==0?rotatePt(lng,lat,rotCenterLng,rotCenterLat,holeRotation):{lng,lat};
+    // Then re-project in green-view space (need rotated bounds)
+    // Simple: use same rotation on bounds
+    const x=offX+((rp.lng-gMinLng)*cosLat)/geoW*cW2;
+    const y=offY+(1-(rp.lat-gMinLat)/geoH)*cH2;
+    return[x,y];
+  }
+
+  // Draw background
+  ctx2.fillStyle='#0a1a0c';
+  ctx2.fillRect(0,0,W,H);
+
+  // Draw features
+  const DRAW_ORDER=['Rough','Fairway','Green','Greenside Bunker'];
+  DRAW_ORDER.forEach(type=>{
+    hFeatures.filter(f=>f.label===type).forEach(f=>{
+      const style=FEATURE_STYLES[type]||FEATURE_STYLES['Rough'];
+      ctx2.beginPath();
+      f.coords.forEach(ring=>{
+        ring.forEach(([lng,lat],i)=>{
+          const[x,y]=gProj(lng,lat);
+          i===0?ctx2.moveTo(x,y):ctx2.lineTo(x,y);
+        });
+        ctx2.closePath();
+      });
+      ctx2.fillStyle=style.fill; ctx2.fill();
+      if(style.stroke){ctx2.strokeStyle=style.stroke;ctx2.lineWidth=0.8;ctx2.stroke();}
+    });
+  });
+
+  // Draw pin
+  if(pin){
+    const[px,py]=gProj(pin.lng,pin.lat);
+    // Flag pole
+    ctx2.beginPath();ctx2.moveTo(px,py);ctx2.lineTo(px,py-28);
+    ctx2.strokeStyle='rgba(255,255,255,0.9)';ctx2.lineWidth=2;ctx2.stroke();
+    // Flag
+    ctx2.beginPath();ctx2.moveTo(px,py-28);ctx2.lineTo(px+14,py-21);ctx2.lineTo(px,py-14);
+    ctx2.fillStyle='#e63946';ctx2.fill();
+    // Hole circle
+    ctx2.beginPath();ctx2.arc(px,py,5,0,Math.PI*2);
+    ctx2.fillStyle='#fff';ctx2.fill();
+    ctx2.beginPath();ctx2.arc(px,py,5,0,Math.PI*2);
+    ctx2.strokeStyle='rgba(0,0,0,0.5)';ctx2.lineWidth=1;ctx2.stroke();
+  } else {
+    // No pin set indicator
+    const[cx,cy]=[W/2,H/2];
+    ctx2.fillStyle='rgba(255,255,255,0.25)';
+    ctx2.font='14px -apple-system,sans-serif';
+    ctx2.textAlign='center';
+    ctx2.fillText('Tap "Set Pin Here" to place flag',cx,H-50);
+  }
+
+  // Draw shots on green
+  const shots=roundData[currentHole].shots;
+  shots.forEach((s,i)=>{
+    if(s.holed) return;
+    const[sx,sy]=gProj(s.lng,s.lat);
+    const lo=LIES.find(l=>l.key===s.lie)||LIES[1];
+    ctx2.beginPath();ctx2.arc(sx,sy,7,0,Math.PI*2);
+    ctx2.fillStyle=lo.color;ctx2.fill();
+    ctx2.strokeStyle='#fff';ctx2.lineWidth=1.5;ctx2.stroke();
+    ctx2.fillStyle='#fff';ctx2.font='bold 9px -apple-system,sans-serif';
+    ctx2.textAlign='center';ctx2.textBaseline='middle';
+    ctx2.fillText(i+1,sx,sy);
+  });
+
+  // Update distance display
+  const lastShot=shots.filter(s=>!s.holed).slice(-1)[0];
+  const distEl=document.getElementById('gv-dist');
+  if(lastShot&&pin){
+    const d=hvYards(lastShot.lat,lastShot.lng,pin.lat,pin.lng);
+    const ft=Math.round(d*3);
+    distEl.textContent=ft+' ft to pin';
+  } else if(!pin){
+    distEl.textContent='No pin set';
+  } else {
+    distEl.textContent='— to pin';
+  }
+
+  // Show putt row if last shot is on green
+  const puttRow=document.getElementById('gv-putt-row');
+  if(lastShot&&lastShot.lie==='green'&&!lastShot.putts){
+    puttRow.style.display='flex';
+  } else {
+    puttRow.style.display='none';
+  }
+}
+
+// ── SET PIN VIA GPS ─────────────────────────────────────────
+function setPinGPS(){
+  if(!navigator.geolocation){showGreenToast('GPS not available');return;}
+  const btn=document.getElementById('set-pin-btn');
+  btn.classList.add('locating');
+  btn.textContent='📡 Acquiring…';
+  const opts={enableHighAccuracy:true,timeout:8000,maximumAge:0};
+  navigator.geolocation.getCurrentPosition(function(pos){
+    const{latitude:lat,longitude:lng,accuracy}=pos.coords;
+    roundData[currentHole].pin={lat,lng};
+    btn.classList.remove('locating');
+    btn.textContent='📍 Set Pin Here';
+    drawGreenView();
+    drawMap();
+    showGreenToast('Pin set ⛳  ±'+Math.round(accuracy)+'m');
+  },function(err){
+    btn.classList.remove('locating');
+    btn.textContent='📍 Set Pin Here';
+    if(err.code===1) showGreenToast('Location permission denied');
+    else showGreenToast('GPS error — try again');
+  },opts);
+}
+
+function setPinGPSSidebar(){
+  if(!navigator.geolocation){showToast('GPS not available');return;}
+  var btn=document.getElementById('set-pin-gps-btn');
+  btn.textContent='📡 Acquiring…';
+  navigator.geolocation.getCurrentPosition(function(pos){
+    roundData[currentHole].pin={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    btn.textContent='📍 GPS Set Pin Location';
+    drawMap(); updateSidebar();
+    showToast('Pin set ⛳  ±'+Math.round(pos.coords.accuracy)+'m');
+  },function(err){
+    btn.textContent='📍 GPS Set Pin Location';
+    showToast('GPS error — try again');
+  },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+}
+
+function showGreenToast(msg){
+  const t=document.getElementById('green-toast');
+  t.textContent=msg;
+  t.style.display='block';
+  setTimeout(function(){t.style.display='none';},2500);
+}
+
+// Wire up green panel buttons
+(function(){
+  var spb=document.getElementById('set-pin-btn');
+  if(spb){
+    spb.addEventListener('click',setPinGPS);
+    spb.addEventListener('touchend',function(e){e.preventDefault();setPinGPS();});
+  }
+  var gpm=document.getElementById('gv-putt-minus');
+  var gpp=document.getElementById('gv-putt-plus');
+  var gpc=document.getElementById('gv-putt-confirm');
+  if(gpm){
+    gpm.addEventListener('click',function(){adjustPutts(-1);document.getElementById('gv-putt-count').textContent=puttCount;drawGreenView();});
+    gpm.addEventListener('touchend',function(e){e.preventDefault();adjustPutts(-1);document.getElementById('gv-putt-count').textContent=puttCount;drawGreenView();});
+  }
+  if(gpp){
+    gpp.addEventListener('click',function(){adjustPutts(1);document.getElementById('gv-putt-count').textContent=puttCount;drawGreenView();});
+    gpp.addEventListener('touchend',function(e){e.preventDefault();adjustPutts(1);document.getElementById('gv-putt-count').textContent=puttCount;drawGreenView();});
+  }
+  if(gpc){
+    gpc.addEventListener('click',function(){confirmPutts();drawGreenView();});
+    gpc.addEventListener('touchend',function(e){e.preventDefault();confirmPutts();drawGreenView();});
+  }
+})();
+
+
 
 // ── REPORT ─────────────────────────────────────────────────
 function drawLineChart(canvas,datasets){
@@ -1498,14 +1818,12 @@ showToast('Holes 1–9 mapped ✓ — tap a hole to begin');
     finishBtn.addEventListener('touchend', function(e){e.preventDefault();finishRound();});
   }
   // Tab buttons
-  document.querySelectorAll('.ntab').forEach(function(b){
-    b.addEventListener('touchend', function(e){
-      e.preventDefault();
-      var tab = b.getAttribute('onclick');
-      if(tab) eval(tab.replace('showTab(','').replace(')','').replace(/'/g,''));
-      var tabName = b.textContent.trim().indexOf('Scorecard') > -1 ? 'scorecard' : 'track';
-      showTab(tabName);
-    });
+  var tabMap = {'ntab-track':'track','ntab-green':'green','ntab-scorecard':'scorecard'};
+  Object.keys(tabMap).forEach(function(id){
+    var btn = document.getElementById(id);
+    if(btn){
+      btn.addEventListener('touchend',function(e){e.preventDefault();showTab(tabMap[id]);});
+    }
   });
   // Putt buttons
   document.querySelectorAll('.putt-btn').forEach(function(b,i){
@@ -1520,6 +1838,11 @@ showToast('Holes 1–9 mapped ✓ — tap a hole to begin');
   if(pinBtn) pinBtn.addEventListener('touchend', function(e){e.preventDefault();setMode('pin');});
   var shotBtn = document.getElementById('mbtn-shot');
   if(shotBtn) shotBtn.addEventListener('touchend', function(e){e.preventDefault();setMode('shot');});
+  var setPinGpsBtn = document.getElementById('set-pin-gps-btn');
+  if(setPinGpsBtn){
+    setPinGpsBtn.addEventListener('click', function(){setPinGPSSidebar();});
+    setPinGpsBtn.addEventListener('touchend', function(e){e.preventDefault();setPinGPSSidebar();});
+  }
   // Shot delete — event delegation on the list container
   var shotList = document.getElementById('shot-list');
   if(shotList){
