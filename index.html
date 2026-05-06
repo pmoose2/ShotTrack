@@ -1505,9 +1505,15 @@ function drawGreenView(){
   document.getElementById('gv-hole-name').textContent='Hole '+(currentHole+1);
   document.getElementById('gv-par-info').textContent=' · Par '+PARS[currentHole];
 
+  // Only green + bunkers — no fairway/rough polygons (they overwhelm the view)
   var hFeatures=ALL_FEATURES.filter(function(f){
     return f.hole===currentHole+1&&
-      (f.label==='Green'||f.label==='Greenside Bunker'||f.label==='Rough'||f.label==='Fairway');
+      (f.label==='Green'||f.label==='Greenside Bunker'||f.label==='Fairway Bunker');
+  });
+  // All features for clipping context (drawn behind)
+  var hAllFeatures=ALL_FEATURES.filter(function(f){
+    return f.hole===currentHole+1&&
+      (f.label==='Rough'||f.label==='Native Area'||f.label==='Native Area/Rough'||f.label==='Fairway');
   });
   var pin=roundData[currentHole].pin;
 
@@ -1520,9 +1526,9 @@ function drawGreenView(){
   }
 
   // Bounds: use green + bunkers, expand for context
+  // Base bounds from green polygon only
   var greenFeats=hFeatures.filter(function(f){return f.label==='Green';});
-  var basePts=greenFeats.concat(hFeatures.filter(function(f){return f.label==='Greenside Bunker';}))
-    .reduce(function(a,f){return a.concat(f.coords.reduce(function(b,r){return b.concat(r);},[]));},[]);
+  var basePts=greenFeats.reduce(function(a,f){return a.concat(f.coords.reduce(function(b,r){return b.concat(r);},[]));},[]);
   if(!basePts.length) basePts=hFeatures.reduce(function(a,f){return a.concat(f.coords.reduce(function(b,r){return b.concat(r);},[]));},[]);
 
   var lngs=basePts.map(function(p){return p[0];});
@@ -1532,14 +1538,15 @@ function drawGreenView(){
   var bMinLat=Math.min.apply(null,lats);
   var bMaxLat=Math.max.apply(null,lats);
 
-  // Expand 2.5x for context
-  var lngSpan=bMaxLng-bMinLng;
-  var latSpan=bMaxLat-bMinLat;
-  bMinLng-=lngSpan*2.5; bMaxLng+=lngSpan*2.5;
-  bMinLat-=latSpan*2.5; bMaxLat+=latSpan*2.5;
+  // Expand by fixed ~25 yards in each direction from green edge
+  var yardsBuffer = 28;
+  var latBuffer  = yardsBuffer / 1760 * (1/69.0);   // yards → degrees lat
+  var lngBuffer  = yardsBuffer / 1760 * (1/69.0) / Math.cos(midLat*Math.PI/180);
+  bMinLng -= lngBuffer; bMaxLng += lngBuffer;
+  bMinLat -= latBuffer; bMaxLat += latBuffer;
   if(pin){
-    bMinLng=Math.min(bMinLng,pin.lng-lngSpan); bMaxLng=Math.max(bMaxLng,pin.lng+lngSpan);
-    bMinLat=Math.min(bMinLat,pin.lat-latSpan); bMaxLat=Math.max(bMaxLat,pin.lat+latSpan);
+    bMinLng=Math.min(bMinLng,pin.lng-lngBuffer*0.5); bMaxLng=Math.max(bMaxLng,pin.lng+lngBuffer*0.5);
+    bMinLat=Math.min(bMinLat,pin.lat-latBuffer*0.5); bMaxLat=Math.max(bMaxLat,pin.lat+latBuffer*0.5);
   }
 
   var midLat=(bMinLat+bMaxLat)/2;
@@ -1556,10 +1563,10 @@ function drawGreenView(){
            offY+(1-(lat-bMinLat)/geoH)*cH2];
   }
 
-  // Draw features
-  var DRAW_ORDER=['Rough','Fairway','Green','Greenside Bunker'];
-  DRAW_ORDER.forEach(function(type){
-    hFeatures.filter(function(f){return f.label===type;}).forEach(function(f){
+  // Draw background (rough/fairway) first
+  var BG_ORDER=['Rough','Native Area','Native Area/Rough','Fairway'];
+  BG_ORDER.forEach(function(type){
+    hAllFeatures.filter(function(f){return f.label===type;}).forEach(function(f){
       var style=STYLE[type]||STYLE['Rough'];
       ctx2.beginPath();
       f.coords.forEach(function(ring){
@@ -1570,7 +1577,23 @@ function drawGreenView(){
         ctx2.closePath();
       });
       ctx2.fillStyle=style.fill; ctx2.fill();
-      if(style.stroke){ctx2.strokeStyle=style.stroke;ctx2.lineWidth=1;ctx2.stroke();}
+    });
+  });
+  // Then draw green and bunkers on top
+  var FG_ORDER=['Green','Fairway Bunker','Greenside Bunker'];
+  FG_ORDER.forEach(function(type){
+    hFeatures.filter(function(f){return f.label===type;}).forEach(function(f){
+      var style=STYLE[type]||STYLE['Green'];
+      ctx2.beginPath();
+      f.coords.forEach(function(ring){
+        ring.forEach(function(pt,i){
+          var xy=gp(pt[0],pt[1]);
+          if(i===0) ctx2.moveTo(xy[0],xy[1]); else ctx2.lineTo(xy[0],xy[1]);
+        });
+        ctx2.closePath();
+      });
+      ctx2.fillStyle=style.fill; ctx2.fill();
+      if(style.stroke){ctx2.strokeStyle=style.stroke;ctx2.lineWidth=1.5;ctx2.stroke();}
     });
   });
 
