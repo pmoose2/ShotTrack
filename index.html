@@ -12,18 +12,17 @@
 /* ── GREEN VIEW PANEL ── */
 #green-panel{
   display:none;flex:1;flex-direction:column;
-  background:var(--green-deep);overflow:hidden;
+  background:var(--green-deep);overflow:hidden;min-height:0;
 }
 #green-panel.active{display:flex;}
 .green-view-wrap{
-  flex:1;display:flex;flex-direction:column;min-height:0;
+  flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;
 }
 #green-canvas-wrap{
-  flex:1;position:relative;min-height:0;
+  flex:1;position:relative;min-height:0;overflow:hidden;
 }
 #green-canvas{
-  width:100%;height:100%;display:block;
-  touch-action:none;
+  display:block;
 }
 .green-controls{
   background:rgba(8,18,10,0.95);
@@ -1473,7 +1472,7 @@ function showTab(tab){
   document.getElementById('green-panel').style.display=tab==='green'?'flex':'none';
   document.getElementById('sc-panel').style.display=tab==='scorecard'?'block':'none';
   if(tab==='scorecard') buildReport();
-  else if(tab==='green') setTimeout(drawGreenView,50);
+  else if(tab==='green') setTimeout(drawGreenView,80);
   else setTimeout(drawMap,50);
 }
 function finishRound(){showTab('scorecard');}
@@ -1481,156 +1480,139 @@ function finishRound(){showTab('scorecard');}
 // ── GREEN VIEW ──────────────────────────────────────────────
 function drawGreenView(){
   if(currentHole<0) return;
-  const cv=document.getElementById('green-canvas');
-  const wrap=document.getElementById('green-canvas-wrap');
-  cv.width=wrap.clientWidth||window.innerWidth;
-  cv.height=wrap.clientHeight||(window.innerHeight*0.55);
-  const ctx2=cv.getContext('2d');
-  ctx2.clearRect(0,0,cv.width,cv.height);
+  var cv=document.getElementById('green-canvas');
+  var wrap=document.getElementById('green-canvas-wrap');
 
-  // Update header
-  const par=PARS[currentHole];
+  // offsetWidth/Height works even when flex panel just became visible
+  var W=wrap.offsetWidth;
+  var H=wrap.offsetHeight;
+  // Fallback if still zero (can happen on first paint)
+  if(!W||!H){
+    setTimeout(drawGreenView,100);
+    return;
+  }
+  cv.width=W; cv.height=H;
+
+  var ctx2=cv.getContext('2d');
+  ctx2.fillStyle='#0d1f10';
+  ctx2.fillRect(0,0,W,H);
+
   document.getElementById('gv-hole-name').textContent='Hole '+(currentHole+1);
-  document.getElementById('gv-par-info').textContent=' · Par '+par;
+  document.getElementById('gv-par-info').textContent=' · Par '+PARS[currentHole];
 
-  // Filter to green-complex features only
-  const greenTypes=['Green','Greenside Bunker','Rough','Native Area','Fairway'];
-  const hFeatures=ALL_FEATURES.filter(f=>f.hole===currentHole+1&&
-    (f.label==='Green'||f.label==='Greenside Bunker'||f.label==='Rough'||f.label==='Fairway'));
-  const pin=roundData[currentHole].pin;
+  var hFeatures=ALL_FEATURES.filter(function(f){
+    return f.hole===currentHole+1&&
+      (f.label==='Green'||f.label==='Greenside Bunker'||f.label==='Rough'||f.label==='Fairway');
+  });
+  var pin=roundData[currentHole].pin;
 
   if(!hFeatures.length){
-    ctx2.fillStyle='rgba(255,255,255,0.3)';
-    ctx2.font='16px -apple-system,sans-serif';
-    ctx2.textAlign='center';
-    ctx2.fillText('No green data for hole '+(currentHole+1),cv.width/2,cv.height/2);
+    ctx2.fillStyle='rgba(255,255,255,0.4)';
+    ctx2.font='15px -apple-system,sans-serif';
+    ctx2.textAlign='center'; ctx2.textBaseline='middle';
+    ctx2.fillText('No green data for this hole',W/2,H/2);
     return;
   }
 
-  // Tight bounds around the green only (expand 40% for context)
-  const greenFeats=hFeatures.filter(f=>f.label==='Green');
-  const allPts=greenFeats.flatMap(f=>f.coords.flatMap(r=>r));
-  if(!allPts.length) return;
-  let gMinLng=Math.min(...allPts.map(p=>p[0]));
-  let gMaxLng=Math.max(...allPts.map(p=>p[0]));
-  let gMinLat=Math.min(...allPts.map(p=>p[1]));
-  let gMaxLat=Math.max(...allPts.map(p=>p[1]));
+  // Bounds: use green + bunkers, expand for context
+  var greenFeats=hFeatures.filter(function(f){return f.label==='Green';});
+  var basePts=greenFeats.concat(hFeatures.filter(function(f){return f.label==='Greenside Bunker';}))
+    .reduce(function(a,f){return a.concat(f.coords.reduce(function(b,r){return b.concat(r);},[]));},[]);
+  if(!basePts.length) basePts=hFeatures.reduce(function(a,f){return a.concat(f.coords.reduce(function(b,r){return b.concat(r);},[]));},[]);
 
-  // Expand bounds by 3x to show surroundings
-  const lngPad=(gMaxLng-gMinLng)*2.5;
-  const latPad=(gMaxLat-gMinLat)*2.5;
-  gMinLng-=lngPad; gMaxLng+=lngPad;
-  gMinLat-=latPad; gMaxLat+=latPad;
+  var lngs=basePts.map(function(p){return p[0];});
+  var lats=basePts.map(function(p){return p[1];});
+  var bMinLng=Math.min.apply(null,lngs);
+  var bMaxLng=Math.max.apply(null,lngs);
+  var bMinLat=Math.min.apply(null,lats);
+  var bMaxLat=Math.max.apply(null,lats);
 
+  // Expand 2.5x for context
+  var lngSpan=bMaxLng-bMinLng;
+  var latSpan=bMaxLat-bMinLat;
+  bMinLng-=lngSpan*2.5; bMaxLng+=lngSpan*2.5;
+  bMinLat-=latSpan*2.5; bMaxLat+=latSpan*2.5;
   if(pin){
-    gMinLng=Math.min(gMinLng,pin.lng-lngPad*0.3);
-    gMaxLng=Math.max(gMaxLng,pin.lng+lngPad*0.3);
-    gMinLat=Math.min(gMinLat,pin.lat-latPad*0.3);
-    gMaxLat=Math.max(gMaxLat,pin.lat+latPad*0.3);
+    bMinLng=Math.min(bMinLng,pin.lng-lngSpan); bMaxLng=Math.max(bMaxLng,pin.lng+lngSpan);
+    bMinLat=Math.min(bMinLat,pin.lat-latSpan); bMaxLat=Math.max(bMaxLat,pin.lat+latSpan);
   }
 
-  // Use same tee-to-green rotation as main view
-  const midLat=(gMinLat+gMaxLat)/2;
-  const cosLat=Math.cos(midLat*Math.PI/180);
-  const PAD2=28;
-  const W=cv.width, H=cv.height;
-  const geoW=(gMaxLng-gMinLng)*cosLat;
-  const geoH=(gMaxLat-gMinLat);
-  const scaleX=(W-PAD2*2)/geoW;
-  const scaleY=(H-PAD2*2)/geoH;
-  const scale=Math.min(scaleX,scaleY);
-  const cW2=geoW*scale, cH2=geoH*scale;
-  const offX=(W-cW2)/2, offY=(H-cH2)/2;
+  var midLat=(bMinLat+bMaxLat)/2;
+  var cosLat=Math.cos(midLat*Math.PI/180);
+  var geoW=(bMaxLng-bMinLng)*cosLat;
+  var geoH=bMaxLat-bMinLat;
+  var PAD2=28;
+  var scale=Math.min((W-PAD2*2)/geoW,(H-PAD2*2)/geoH);
+  var cW2=geoW*scale, cH2=geoH*scale;
+  var offX=(W-cW2)/2, offY=(H-cH2)/2;
 
-  function gProj(lng,lat){
-    // Apply hole rotation
-    const rp=holeRotation!==0?rotatePt(lng,lat,rotCenterLng,rotCenterLat,holeRotation):{lng,lat};
-    // Then re-project in green-view space (need rotated bounds)
-    // Simple: use same rotation on bounds
-    const x=offX+((rp.lng-gMinLng)*cosLat)/geoW*cW2;
-    const y=offY+(1-(rp.lat-gMinLat)/geoH)*cH2;
-    return[x,y];
+  function gp(lng,lat){
+    return[offX+((lng-bMinLng)*cosLat)/geoW*cW2,
+           offY+(1-(lat-bMinLat)/geoH)*cH2];
   }
-
-  // Draw background
-  ctx2.fillStyle='#0a1a0c';
-  ctx2.fillRect(0,0,W,H);
 
   // Draw features
-  const DRAW_ORDER=['Rough','Fairway','Green','Greenside Bunker'];
-  DRAW_ORDER.forEach(type=>{
-    hFeatures.filter(f=>f.label===type).forEach(f=>{
-      const style=FEATURE_STYLES[type]||FEATURE_STYLES['Rough'];
+  var DRAW_ORDER=['Rough','Fairway','Green','Greenside Bunker'];
+  DRAW_ORDER.forEach(function(type){
+    hFeatures.filter(function(f){return f.label===type;}).forEach(function(f){
+      var style=FEATURE_STYLES[type]||FEATURE_STYLES['Rough'];
       ctx2.beginPath();
-      f.coords.forEach(ring=>{
-        ring.forEach(([lng,lat],i)=>{
-          const[x,y]=gProj(lng,lat);
-          i===0?ctx2.moveTo(x,y):ctx2.lineTo(x,y);
+      f.coords.forEach(function(ring){
+        ring.forEach(function(pt,i){
+          var xy=gp(pt[0],pt[1]);
+          if(i===0) ctx2.moveTo(xy[0],xy[1]); else ctx2.lineTo(xy[0],xy[1]);
         });
         ctx2.closePath();
       });
       ctx2.fillStyle=style.fill; ctx2.fill();
-      if(style.stroke){ctx2.strokeStyle=style.stroke;ctx2.lineWidth=0.8;ctx2.stroke();}
+      if(style.stroke){ctx2.strokeStyle=style.stroke;ctx2.lineWidth=1;ctx2.stroke();}
     });
   });
 
-  // Draw pin
+  // Pin
   if(pin){
-    const[px,py]=gProj(pin.lng,pin.lat);
-    // Flag pole
-    ctx2.beginPath();ctx2.moveTo(px,py);ctx2.lineTo(px,py-28);
-    ctx2.strokeStyle='rgba(255,255,255,0.9)';ctx2.lineWidth=2;ctx2.stroke();
-    // Flag
-    ctx2.beginPath();ctx2.moveTo(px,py-28);ctx2.lineTo(px+14,py-21);ctx2.lineTo(px,py-14);
-    ctx2.fillStyle='#e63946';ctx2.fill();
-    // Hole circle
-    ctx2.beginPath();ctx2.arc(px,py,5,0,Math.PI*2);
-    ctx2.fillStyle='#fff';ctx2.fill();
-    ctx2.beginPath();ctx2.arc(px,py,5,0,Math.PI*2);
-    ctx2.strokeStyle='rgba(0,0,0,0.5)';ctx2.lineWidth=1;ctx2.stroke();
+    var pp=gp(pin.lng,pin.lat);
+    ctx2.beginPath(); ctx2.moveTo(pp[0],pp[1]); ctx2.lineTo(pp[0],pp[1]-34);
+    ctx2.strokeStyle='rgba(255,255,255,0.95)'; ctx2.lineWidth=2.5; ctx2.stroke();
+    ctx2.beginPath(); ctx2.moveTo(pp[0],pp[1]-34); ctx2.lineTo(pp[0]+17,pp[1]-24); ctx2.lineTo(pp[0],pp[1]-14);
+    ctx2.closePath(); ctx2.fillStyle='#e63946'; ctx2.fill();
+    ctx2.beginPath(); ctx2.arc(pp[0],pp[1],5,0,Math.PI*2);
+    ctx2.fillStyle='#fff'; ctx2.fill();
   } else {
-    // No pin set indicator
-    const[cx,cy]=[W/2,H/2];
-    ctx2.fillStyle='rgba(255,255,255,0.25)';
-    ctx2.font='14px -apple-system,sans-serif';
-    ctx2.textAlign='center';
-    ctx2.fillText('Tap "Set Pin Here" to place flag',cx,H-50);
+    ctx2.fillStyle='rgba(255,255,255,0.3)';
+    ctx2.font='13px -apple-system,sans-serif';
+    ctx2.textAlign='center'; ctx2.textBaseline='middle';
+    ctx2.fillText('Stand at the hole · tap Set Pin Here',W/2,H-40);
   }
 
-  // Draw shots on green
-  const shots=roundData[currentHole].shots;
-  shots.forEach((s,i)=>{
+  // Shots
+  var shots=roundData[currentHole].shots;
+  shots.forEach(function(s,i){
     if(s.holed) return;
-    const[sx,sy]=gProj(s.lng,s.lat);
-    const lo=LIES.find(l=>l.key===s.lie)||LIES[1];
-    ctx2.beginPath();ctx2.arc(sx,sy,7,0,Math.PI*2);
-    ctx2.fillStyle=lo.color;ctx2.fill();
-    ctx2.strokeStyle='#fff';ctx2.lineWidth=1.5;ctx2.stroke();
-    ctx2.fillStyle='#fff';ctx2.font='bold 9px -apple-system,sans-serif';
-    ctx2.textAlign='center';ctx2.textBaseline='middle';
-    ctx2.fillText(i+1,sx,sy);
+    var sp=gp(s.lng,s.lat);
+    var lo=LIES.find(function(l){return l.key===s.lie;})||LIES[1];
+    ctx2.beginPath(); ctx2.arc(sp[0],sp[1],8,0,Math.PI*2);
+    ctx2.fillStyle=lo.color; ctx2.fill();
+    ctx2.strokeStyle='#fff'; ctx2.lineWidth=1.5; ctx2.stroke();
+    ctx2.fillStyle='#fff'; ctx2.font='bold 10px -apple-system,sans-serif';
+    ctx2.textAlign='center'; ctx2.textBaseline='middle';
+    ctx2.fillText(i+1,sp[0],sp[1]);
   });
 
-  // Update distance display
-  const lastShot=shots.filter(s=>!s.holed).slice(-1)[0];
-  const distEl=document.getElementById('gv-dist');
+  // Distance
+  var lastShot=null;
+  for(var i=shots.length-1;i>=0;i--){if(!shots[i].holed){lastShot=shots[i];break;}}
+  var distEl=document.getElementById('gv-dist');
   if(lastShot&&pin){
-    const d=hvYards(lastShot.lat,lastShot.lng,pin.lat,pin.lng);
-    const ft=Math.round(d*3);
-    distEl.textContent=ft+' ft to pin';
-  } else if(!pin){
-    distEl.textContent='No pin set';
+    distEl.textContent=Math.round(hvYards(lastShot.lat,lastShot.lng,pin.lat,pin.lng)*3)+' ft to pin';
   } else {
-    distEl.textContent='— to pin';
+    distEl.textContent=pin?'— to pin':'No pin set';
   }
 
-  // Show putt row if last shot is on green
-  const puttRow=document.getElementById('gv-putt-row');
-  if(lastShot&&lastShot.lie==='green'&&!lastShot.putts){
-    puttRow.style.display='flex';
-  } else {
-    puttRow.style.display='none';
-  }
+  // Putt row
+  var puttRow=document.getElementById('gv-putt-row');
+  var showPutts=lastShot&&lastShot.lie==='green'&&!lastShot.putts;
+  puttRow.style.display=showPutts?'flex':'none';
 }
 
 // ── SET PIN VIA GPS ─────────────────────────────────────────
