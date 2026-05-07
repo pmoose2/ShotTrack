@@ -1341,7 +1341,7 @@ function detectLie(lng, lat, holeNum){
 let gpsWatchId=null;
 let gpsReadings=[];
 let gpsCollecting=false;
-const GPS_SAMPLES=6;       // number of readings to average
+const GPS_SAMPLES=12;      // number of readings to average
 const GPS_MAX_ACCURACY=15; // meters — reject readings worse than this
 const GPS_TIMEOUT=8000;    // ms to collect readings
 
@@ -1802,7 +1802,7 @@ function drawGreenView(){
 var pinGpsReadings=[];
 var pinGpsWatchId=null;
 var pinGpsCollecting=false;
-var PIN_SAMPLES=8;
+var PIN_SAMPLES=12;
 var PIN_MAX_ACCURACY=12;
 
 function startPinGPS(fromGreen){
